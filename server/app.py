@@ -8,11 +8,17 @@ from dotenv import load_dotenv
 load_dotenv()
 app = Flask(__name__)
 CORS(app)
-logging.basicConfig(level=logging.DEBUG)
+
+# Set up logging
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 RAPIDAPI_KEY = os.environ.get('RAPIDAPI_KEY')
 if not RAPIDAPI_KEY:
-    app.logger.error('RAPIDAPI_KEY not set in environment variables')
+    logger.error('RAPIDAPI_KEY not set in environment variables')
     @app.route('/', methods=['GET', 'POST'])
     def server_error():
         return jsonify({"error": "Server configuration error"}), 500
@@ -21,12 +27,14 @@ BASE_URL = "https://open-weather13.p.rapidapi.com/city/{city}/{country}"
 
 @app.route('/weather', methods=['GET'])
 def get_weather():
-    app.logger.debug('Received request for /weather')
+    logger.info('Received weather request')
+
     city = request.args.get('city')
     country = request.args.get('country', 'EN')
-    app.logger.debug(f'City: {city}, Country: {country}')
+    logger.info(f'Request for city: {city}, country: {country}')
+
     if not city:
-        app.logger.error('No city provided')
+        logger.error('No city provided')
         return jsonify({"error": "City parameter is required"}), 400
 
     url = BASE_URL.format(city=city, country=country)
@@ -34,12 +42,12 @@ def get_weather():
         "x-rapidapi-key": RAPIDAPI_KEY,
         "x-rapidapi-host": "open-weather13.p.rapidapi.com"
     }
-    app.logger.debug(f'Making request to RapidAPI OpenWeather with URL: {url}')
 
     try:
+        logger.info(f'Making request to RapidAPI for {city}')
         response = requests.get(url, headers=headers, timeout=10)
-        app.logger.debug(f'RapidAPI response status code: {response.status_code}')
         response.raise_for_status()
+
         data = response.json()
         weather = {
             'city': data['name'],
@@ -48,15 +56,18 @@ def get_weather():
             'description': data['weather'][0]['description'],
             'icon': data['weather'][0]['icon']
         }
-        app.logger.debug(f'Returning weather data: {weather}')
+
+        logger.info(f'Successfully retrieved weather data for {city}')
         return jsonify(weather)
+
     except requests.exceptions.HTTPError as http_err:
-        app.logger.error(f'HTTP error occurred: {http_err}')
-        error_message = f"Error fetching weather data: {http_err}"
-        return jsonify({"error": error_message}), response.status_code
-    except requests.exceptions.RequestException as err:
-        app.logger.error(f'An error occurred: {err}')
-        return jsonify({"error": f"Error fetching weather data: {err}"}), 500
+        logger.error(f'HTTP error occurred: {http_err}')
+        return jsonify({"error": str(http_err)}), response.status_code
+    except Exception as err:
+        logger.error(f'Error occurred: {err}')
+        return jsonify({"error": str(err)}), 500
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    logger.info('Starting Weather API server...')
+    # Explicitly binding to IPv4 loopback address
+    app.run(host='127.0.0.1', port=5000, debug=True)
