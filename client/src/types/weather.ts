@@ -1,43 +1,54 @@
+// Base weather condition type
+type WeatherCondition = {
+  id: number;
+  main: string; // Main weather condition (e.g., "Rain", "Snow", "Clear")
+  description: string; // Detailed weather description
+  icon: string; // Weather icon code
+};
+
+// Base temperature type
+type Temperature = {
+  temp: number;
+  feels_like: number;
+  temp_min: number;
+  temp_max: number;
+  pressure: number;
+  humidity: number;
+  sea_level?: number;
+  grnd_level?: number;
+  temp_kf?: number;
+};
+
+// Base wind type
+type Wind = {
+  speed: number; // in m/s
+  deg: number; // in degrees
+  gust?: number; // in m/s
+};
+
 // Raw API response types
 export type OpenWeatherResponse = {
   coord: {
     lon: number;
     lat: number;
   };
-  weather: Array<{
-    id: number;
-    main: string;
-    description: string;
-    icon: string;
-  }>;
+  weather: WeatherCondition[];
   base: string;
-  main: {
-    temp: number;
-    feels_like: number;
-    temp_min: number;
-    temp_max: number;
-    pressure: number;
-    humidity: number;
-    sea_level?: number;
-    grnd_level?: number;
-  };
+  main: Temperature;
   visibility: number;
-  wind: {
-    speed: number;
-    deg: number;
-  };
+  wind: Wind;
   clouds: {
     all: number;
   };
-  dt: number;
+  dt: number; // Unix timestamp
   sys: {
     type: number;
     id: number;
     country: string;
-    sunrise: number;
-    sunset: number;
+    sunrise: number; // Unix timestamp
+    sunset: number; // Unix timestamp
   };
-  timezone: number;
+  timezone: number; // Shift in seconds from UTC
   id: number;
   name: string;
   cod: number;
@@ -47,40 +58,21 @@ export type OpenWeatherResponse = {
 export type OpenWeatherForecastResponse = {
   cod: string;
   message: number;
-  cnt: number;
+  cnt: number; // Number of timestamps returned
   list: Array<{
-    dt: number;
-    main: {
-      temp: number;
-      feels_like: number;
-      temp_min: number;
-      temp_max: number;
-      pressure: number;
-      humidity: number;
-      sea_level?: number;
-      grnd_level?: number;
-      temp_kf?: number;
-    };
-    weather: Array<{
-      id: number;
-      main: string;
-      description: string;
-      icon: string;
-    }>;
+    dt: number; // Unix timestamp
+    main: Temperature;
+    weather: WeatherCondition[];
     clouds: {
       all: number;
     };
-    wind: {
-      speed: number;
-      deg: number;
-      gust?: number;
-    };
+    wind: Wind;
     visibility: number;
-    pop: number;
+    pop: number; // Probability of precipitation (0-1)
     sys: {
-      pod: string;
+      pod: string; // Part of day (n - night, d - day)
     };
-    dt_txt: string;
+    dt_txt: string; // Date and time in text format
   }>;
   city: {
     id: number;
@@ -92,54 +84,55 @@ export type OpenWeatherForecastResponse = {
     country: string;
     population: number;
     timezone: number;
-    sunrise: number;
-    sunset: number;
+    sunrise: number; // Unix timestamp
+    sunset: number; // Unix timestamp
   };
 };
 
-// Common weather data structure
+// Transformed weather data structure for consistent use across components
 export type WeatherData = {
   temperature: {
-    current: number; // in Celsius
-    feels_like: number; // in Celsius
-    min: number; // in Celsius
-    max: number; // in Celsius
+    current: number; // in Fahrenheit
+    feels_like: number; // in Fahrenheit
+    min: number; // in Fahrenheit
+    max: number; // in Fahrenheit
   };
-  humidity: number; // in percentage
+  humidity: number; // in percentage (0-100)
   wind: {
     speed: number; // in m/s
-    degree: number; // in degrees
+    degree: number; // in degrees (0-360)
   };
   weather: {
-    main: string; // Main weather condition (e.g., "Rain", "Snow", "Clear")
+    main: string; // Main weather condition
     description: string; // Detailed weather description
     icon: string; // Weather icon code
   };
   pressure: number; // in hPa
   visibility: number; // in kilometers
-  timestamp: number; // unix timestamp
+  timestamp: number; // Unix timestamp in seconds
 };
 
 // Current weather response type
 export type WeatherResponse = WeatherData & {
   city: string; // City name
-  country: string; // Country code (e.g., "US", "GB")
+  country: string; // Country code (ISO 3166-1 alpha-2)
+};
+
+// Daily forecast data extending weather data
+export type DailyForecast = WeatherData & {
+  dt_txt: string; // ISO date string (YYYY-MM-DD HH:mm:ss)
+  pop: number; // Probability of precipitation (0-1)
 };
 
 // Forecast response type
 export type ForecastResponse = {
   city: string; // City name
-  country: string; // Country code (e.g., "US", "GB")
-  forecast: Array<
-    WeatherData & {
-      dt_txt: string; // Date/time text (e.g., "2024-03-19 12:00:00")
-      pop: number; // Probability of precipitation (0-1)
-    }
-  >;
+  country: string; // Country code (ISO 3166-1 alpha-2)
+  forecast: DailyForecast[];
 };
 
 // API error response type
 export type WeatherErrorResponse = {
-  error: string;
-  status?: number;
+  error: string; // Error message
+  status?: number; // HTTP status code
 };
