@@ -15,33 +15,58 @@ function kelvinToFahrenheit(kelvin: number): number {
   return Math.round((((kelvin - 273.15) * 9) / 5 + 32) * 10) / 10;
 }
 
-function validateCoordinates(
-  lat: string | null,
-  lon: string | null,
-): { error?: string; latNum?: number; lonNum?: number } {
-  if (!lat || !lon) {
-    return { error: "Both latitude and longitude are required" };
-  }
+function groupForecastsByDay(forecastList: any[]) {
+  const dailyForecasts = forecastList.reduce((acc: any, forecast: any) => {
+    // Use dt_txt for consistent date handling
+    const dateStr = forecast.dt_txt.split(" ")[0]; // Get just the date part 'YYYY-MM-DD'
 
-  const latNum = parseFloat(lat);
-  const lonNum = parseFloat(lon);
+    if (!acc[dateStr]) {
+      // Initialize with first forecast of the day
+      acc[dateStr] = {
+        temperature: {
+          current: kelvinToFahrenheit(forecast.main.temp),
+          feels_like: kelvinToFahrenheit(forecast.main.feels_like),
+          min: kelvinToFahrenheit(forecast.main.temp_min),
+          max: kelvinToFahrenheit(forecast.main.temp_max),
+        },
+        humidity: forecast.main.humidity,
+        wind: {
+          speed: forecast.wind.speed,
+          degree: forecast.wind.deg,
+        },
+        weather: {
+          main: forecast.weather[0].main,
+          description: forecast.weather[0].description,
+          icon: forecast.weather[0].icon,
+        },
+        pressure: forecast.main.pressure,
+        visibility: forecast.visibility / 1000,
+        timestamp: forecast.dt,
+        dt_txt: forecast.dt_txt, // Keep the original dt_txt
+        pop: forecast.pop || 0,
+      };
+    } else {
+      // Update min/max temperatures
+      acc[dateStr].temperature.min = Math.min(
+        acc[dateStr].temperature.min,
+        kelvinToFahrenheit(forecast.main.temp_min),
+      );
+      acc[dateStr].temperature.max = Math.max(
+        acc[dateStr].temperature.max,
+        kelvinToFahrenheit(forecast.main.temp_max),
+      );
+      // Update precipitation probability if higher
+      acc[dateStr].pop = Math.max(acc[dateStr].pop, forecast.pop || 0);
+    }
 
-  if (
-    isNaN(latNum) ||
-    isNaN(lonNum) ||
-    latNum < -90 ||
-    latNum > 90 ||
-    lonNum < -180 ||
-    lonNum > 180
-  ) {
-    return { error: "Invalid coordinates provided" };
-  }
+    return acc;
+  }, {});
 
-  return { latNum, lonNum };
-}
-
-function debugLog(label: string, data: any) {
-  console.log(`[DEBUG] ${label}:`, JSON.stringify(data, null, 2));
+  // Convert to array and sort by date
+  return Object.entries(dailyForecasts)
+    .sort(([dateA], [dateB]) => dateA.localeCompare(dateB))
+    .map(([_, forecast]) => forecast)
+    .slice(0, 5); // Ensure we only return 5 days
 }
 
 export async function GET(request: NextRequest) {
@@ -57,22 +82,32 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const lat = searchParams.get("lat");
     const lon = searchParams.get("lon");
-    const date = searchParams.get("date");
 
-    debugLog("Search Params", { lat, lon, date });
-
-    // Validate coordinates
-    const coordValidation = validateCoordinates(lat, lon);
-    if (coordValidation.error) {
+    if (!lat || !lon) {
       return NextResponse.json(
-        { error: coordValidation.error },
+        { error: "Both latitude and longitude are required" },
         { status: 400 },
       );
     }
 
-    // Build the URL for the forecast endpoint
+    const latNum = parseFloat(lat);
+    const lonNum = parseFloat(lon);
+
+    if (
+      isNaN(latNum) ||
+      isNaN(lonNum) ||
+      latNum < -90 ||
+      latNum > 90 ||
+      lonNum < -180 ||
+      lonNum > 180
+    ) {
+      return NextResponse.json(
+        { error: "Invalid coordinates provided" },
+        { status: 400 },
+      );
+    }
+
     const url = `${OPEN_WEATHER_URL}/city/fivedaysforcast/${lat}/${lon}`;
-    debugLog("Request URL", url);
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 5000);
@@ -115,70 +150,20 @@ export async function GET(request: NextRequest) {
         );
       }
 
-      const data = await response.json();
-      debugLog("Raw API Response", data);
+      const data: OpenWeatherForecastResponse = await response.json();
 
-      // Ensure data.list exists and has items
       if (!data.list || !Array.isArray(data.list) || data.list.length === 0) {
-        console.error("Invalid forecast data structure:", data);
         return NextResponse.json(
           { error: "Invalid response from weather service" },
           { status: 502 },
         );
       }
 
-      // Group forecasts by day to get one forecast per day
-      const dailyForecasts = data.list.reduce((acc: any, item: any) => {
-        // Convert timestamp to date string
-        const date = new Date(item.dt * 1000).toISOString().split("T")[0];
-        if (!acc[date]) {
-          acc[date] = item;
-        }
-        return acc;
-      }, {});
-
-      debugLog("Grouped Daily Forecasts", dailyForecasts);
-
       const transformedData = {
         city: data.city?.name || "Unknown",
         country: data.city?.country || "Unknown",
-        forecast: Object.values(dailyForecasts).map((item: any) => {
-          const timestamp = item.dt * 1000; // Convert to milliseconds
-          const dateStr = new Date(timestamp).toISOString();
-
-          debugLog("Processing forecast item", {
-            timestamp,
-            dateStr,
-            original: item,
-          });
-
-          return {
-            temperature: {
-              current: kelvinToFahrenheit(item.main.temp),
-              feels_like: kelvinToFahrenheit(item.main.feels_like),
-              min: kelvinToFahrenheit(item.main.temp_min),
-              max: kelvinToFahrenheit(item.main.temp_max),
-            },
-            humidity: item.main.humidity,
-            wind: {
-              speed: item.wind.speed,
-              degree: item.wind.deg,
-            },
-            weather: {
-              main: item.weather[0].main,
-              description: item.weather[0].description,
-              icon: item.weather[0].icon,
-            },
-            pressure: item.main.pressure,
-            visibility: item.visibility / 1000,
-            timestamp: item.dt,
-            dt_txt: dateStr,
-            pop: item.pop || 0,
-          };
-        }),
+        forecast: groupForecastsByDay(data.list),
       };
-
-      debugLog("Transformed Response", transformedData);
 
       return NextResponse.json(transformedData);
     } catch (fetchError) {
