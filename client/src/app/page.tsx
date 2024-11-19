@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useGeolocation } from "@/hooks/useGeolocation";
@@ -22,6 +22,10 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [lastFetchedCoords, setLastFetchedCoords] = useState<{
+    lat: number;
+    lon: number;
+  } | null>(null);
 
   const {
     latitude,
@@ -30,49 +34,67 @@ export default function Home() {
     loading: geoLoading,
   } = useGeolocation();
 
-  // Fetch current weather
-  const fetchCurrentWeather = async (params: URLSearchParams) => {
-    const response = await fetch(`/api/weather?${params}`);
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error || `Error: ${response.status}`);
-    }
-    const data = await response.json();
-    setCurrentWeather(data);
-  };
+  // Fetch weather data
+  const fetchWeatherData = async (params: URLSearchParams) => {
+    const [weatherResponse, forecastResponse] = await Promise.all([
+      fetch(`/api/weather?${params}`),
+      fetch(`/api/weather/forecast?${params}`),
+    ]);
 
-  // Fetch forecast
-  const fetchForecast = async (params: URLSearchParams) => {
-    const response = await fetch(`/api/weather/forecast?${params}`);
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error || `Error: ${response.status}`);
+    if (!weatherResponse.ok) {
+      const errorData = await weatherResponse.json();
+      throw new Error(errorData.error || `Error: ${weatherResponse.status}`);
     }
-    const data = await response.json();
-    setForecastData(data);
+
+    if (!forecastResponse.ok) {
+      const errorData = await forecastResponse.json();
+      throw new Error(errorData.error || `Error: ${forecastResponse.status}`);
+    }
+
+    const [weather, forecast] = await Promise.all([
+      weatherResponse.json(),
+      forecastResponse.json(),
+    ]);
+
+    setCurrentWeather(weather);
+    setForecastData(forecast);
   };
 
   // Fetch weather by coordinates
-  const fetchWeatherByCoords = async (lat: number, lon: number) => {
-    try {
-      setLoading(true);
-      setError("");
+  const fetchWeatherByCoords = useCallback(
+    async (lat: number, lon: number) => {
+      // Check if we're already fetched for these coordinates
+      if (
+        lastFetchedCoords?.lat === lat &&
+        lastFetchedCoords?.lon === lon &&
+        currentWeather &&
+        forecastData
+      ) {
+        return;
+      }
 
-      const params = new URLSearchParams({
-        lat: lat.toString(),
-        lon: lon.toString(),
-      });
+      try {
+        setLoading(true);
+        setError("");
 
-      await Promise.all([fetchCurrentWeather(params), fetchForecast(params)]);
-    } catch (err) {
-      console.error("Error fetching weather:", err);
-      setError(
-        err instanceof Error ? err.message : "Failed to fetch weather data",
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
+        const params = new URLSearchParams({
+          lat: lat.toString(),
+          lon: lon.toString(),
+        });
+
+        await fetchWeatherData(params);
+        setLastFetchedCoords({ lat, lon });
+      } catch (err) {
+        console.error("Error fetching weather:", err);
+        setError(
+          err instanceof Error ? err.message : "Failed to fetch weather data",
+        );
+      } finally {
+        setLoading(false);
+      }
+    },
+    [lastFetchedCoords, currentWeather, forecastData],
+  );
 
   // Fetch weather by city name
   const fetchWeatherByCity = async () => {
@@ -84,12 +106,13 @@ export default function Home() {
     try {
       setLoading(true);
       setError("");
+      setLastFetchedCoords(null); // Reset coords when searching by city
 
       const params = new URLSearchParams({
         city: city.trim(),
       });
 
-      await Promise.all([fetchCurrentWeather(params), fetchForecast(params)]);
+      await fetchWeatherData(params);
     } catch (err) {
       console.error("Error fetching weather:", err);
       setError(
@@ -120,10 +143,10 @@ export default function Home() {
 
   // Effect to fetch weather when coordinates are available
   useEffect(() => {
-    if (latitude !== null && longitude !== null && !currentWeather && !error) {
+    if (latitude !== null && longitude !== null && !geoError) {
       fetchWeatherByCoords(latitude, longitude);
     }
-  }, [latitude, longitude]);
+  }, [latitude, longitude, fetchWeatherByCoords, geoError]);
 
   return (
     <div className="grid grid-rows-[auto_1fr_auto] min-h-screen p-8 gap-8">
