@@ -1,19 +1,8 @@
-import React, { useState } from "react";
-import { Check, ChevronsUpDown, MapPin } from "lucide-react";
+// src/components/PlaceSearch.tsx
+import React, { useState, useEffect, useRef } from "react";
+import { Input } from "@/components/ui/input";
+import { Loader2, Search, X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-} from "@/components/ui/command";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 
 interface Place {
   name: string;
@@ -32,95 +21,124 @@ export function PlaceSearch({
   onPlaceSelect,
   disabled = false,
 }: PlaceSearchProps) {
-  const [open, setOpen] = useState(false);
-  const [value, setValue] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
   const [places, setPlaces] = useState<Place[]>([]);
   const [loading, setLoading] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const searchRef = useRef<HTMLDivElement>(null);
 
-  const searchPlaces = async (searchTerm: string) => {
-    if (searchTerm.length < 2) {
-      setPlaces([]);
-      return;
-    }
-
-    try {
-      setLoading(true);
-      const response = await fetch(
-        `/api/geocoding?search=${encodeURIComponent(searchTerm)}`,
-      );
-
-      if (!response.ok) {
-        throw new Error("Failed to fetch places");
+  // Debounced search function
+  useEffect(() => {
+    const searchPlaces = async () => {
+      if (searchTerm.length < 2) {
+        setPlaces([]);
+        return;
       }
 
-      const data = await response.json();
-      setPlaces(data);
-    } catch (error) {
-      console.error("Error searching places:", error);
-      setPlaces([]);
-    } finally {
-      setLoading(false);
-    }
-  };
+      try {
+        setLoading(true);
+        const response = await fetch(
+          `/api/geocoding?search=${encodeURIComponent(searchTerm)}`,
+        );
 
-  const handleSelect = (place: Place) => {
-    setValue(place.name);
-    setOpen(false);
+        if (!response.ok) {
+          throw new Error("Failed to fetch places");
+        }
+
+        const data = await response.json();
+        setPlaces(data);
+      } catch (error) {
+        console.error("Error searching places:", error);
+        setPlaces([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    const timeoutId = setTimeout(() => {
+      searchPlaces();
+    }, 300); // 300ms delay
+
+    return () => clearTimeout(timeoutId);
+  }, [searchTerm]);
+
+  // Close suggestions when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        searchRef.current &&
+        !searchRef.current.contains(event.target as Node)
+      ) {
+        setShowSuggestions(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const handlePlaceClick = (place: Place) => {
+    setSearchTerm(
+      `${place.name}${place.state ? `, ${place.state}` : ""}, ${place.country}`,
+    );
+    setShowSuggestions(false);
     onPlaceSelect(place);
   };
 
+  const clearSearch = () => {
+    setSearchTerm("");
+    setPlaces([]);
+  };
+
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Button
-          variant="outline"
-          role="combobox"
-          aria-expanded={open}
+    <div ref={searchRef} className="relative w-full">
+      <div className="relative">
+        <Input
+          type="text"
+          placeholder="Search for a place..."
+          value={searchTerm}
+          onChange={(e) => {
+            setSearchTerm(e.target.value);
+            setShowSuggestions(true);
+          }}
           disabled={disabled}
-          className="w-full justify-between"
-        >
-          {value || "Search for a place..."}
-          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className="w-full p-0">
-        <Command shouldFilter={false}>
-          <CommandInput
-            placeholder="Enter a city name..."
-            onValueChange={(search) => {
-              searchPlaces(search);
-            }}
-            className="h-9"
-          />
-          {loading && (
-            <div className="py-6 text-center text-sm text-muted-foreground">
-              Searching places...
-            </div>
+          className="pr-24"
+        />
+        <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
+          {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+          {!loading && searchTerm && (
+            <X
+              className="h-4 w-4 cursor-pointer text-muted-foreground hover:text-foreground"
+              onClick={clearSearch}
+            />
           )}
-          {!loading && places.length === 0 && (
-            <CommandEmpty className="py-6">No places found.</CommandEmpty>
+          {!loading && !searchTerm && (
+            <Search className="h-4 w-4 text-muted-foreground" />
           )}
-          <CommandGroup>
-            {places.map((place) => (
-              <CommandItem
-                key={`${place.lat}-${place.lon}`}
-                value={place.name}
-                onSelect={() => handleSelect(place)}
-              >
-                <MapPin className="mr-2 h-4 w-4 shrink-0" />
-                <span className="flex-1">
-                  {place.name}
-                  {place.state && `, ${place.state}`}
-                  {place.country && ` (${place.country})`}
-                </span>
-                {value === place.name && (
-                  <Check className="ml-2 h-4 w-4 shrink-0" />
+        </div>
+      </div>
+
+      {/* Suggestions dropdown */}
+      {showSuggestions && places.length > 0 && (
+        <div className="absolute z-10 w-full mt-1 bg-background border rounded-md shadow-lg max-h-64 overflow-auto">
+          {places.map((place) => (
+            <div
+              key={`${place.lat}-${place.lon}`}
+              className="p-2 hover:bg-accent cursor-pointer flex items-center gap-2"
+              onClick={() => handlePlaceClick(place)}
+            >
+              <Search className="h-4 w-4 text-muted-foreground" />
+              <div>
+                <span className="font-medium">{place.name}</span>
+                {place.state && (
+                  <span className="text-muted-foreground">, {place.state}</span>
                 )}
-              </CommandItem>
-            ))}
-          </CommandGroup>
-        </Command>
-      </PopoverContent>
-    </Popover>
+                <span className="text-muted-foreground">, {place.country}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }

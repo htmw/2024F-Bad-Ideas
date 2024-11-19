@@ -3,18 +3,26 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { useGeolocation } from "@/hooks/useGeolocation";
 import WeatherDisplay from "@/components/WeatherDisplay";
 import OutfitRecommendation from "@/components/OutfitRecommendation";
-import { AlertCircle, RefreshCw, Search } from "lucide-react";
+import { AlertCircle, RefreshCw } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { PlaceSearch } from "@/components/PlaceSearch";
 import type { WeatherResponse, ForecastResponse } from "@/types/weather";
 
+interface Place {
+  name: string;
+  country: string;
+  state?: string;
+  lat: number;
+  lon: number;
+}
+
 export default function Home() {
-  const [city, setCity] = useState("");
+  const [selectedPlace, setSelectedPlace] = useState<Place | null>(null);
   const [currentWeather, setCurrentWeather] = useState<WeatherResponse | null>(
     null,
   );
@@ -98,60 +106,37 @@ export default function Home() {
     [lastFetchedCoords, currentWeather, forecastData],
   );
 
-  // Fetch weather by city name
-  const fetchWeatherByCity = async () => {
-    if (!city.trim()) {
-      setError("Please enter a city name");
-      return;
-    }
-
-    try {
-      setLoading(true);
-      setError("");
-      setLastFetchedCoords(null); // Reset coords when searching by city
-
-      const params = new URLSearchParams({
-        city: city.trim(),
-      });
-
-      await fetchWeatherData(params);
-    } catch (err) {
-      console.error("Error fetching weather:", err);
-      setError(
-        err instanceof Error ? err.message : "Failed to fetch weather data",
-      );
-    } finally {
-      setLoading(false);
-    }
+  // Handle place selection
+  const handlePlaceSelect = (place: Place) => {
+    setSelectedPlace(place);
+    fetchWeatherByCoords(place.lat, place.lon);
   };
 
   // Handle manual refresh
   const handleRefresh = async () => {
     setIsRefreshing(true);
     try {
-      if (latitude && longitude) {
+      if (selectedPlace) {
+        await fetchWeatherByCoords(selectedPlace.lat, selectedPlace.lon);
+      } else if (latitude && longitude) {
         await fetchWeatherByCoords(latitude, longitude);
-      } else if (currentWeather?.city) {
-        await fetchWeatherByCity();
       }
     } finally {
       setIsRefreshing(false);
     }
   };
 
-  // Handle Enter key press
-  const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter" && !loading) {
-      fetchWeatherByCity();
-    }
-  };
-
   // Effect to fetch weather when coordinates are available
   useEffect(() => {
-    if (latitude !== null && longitude !== null && !geoError) {
+    if (
+      latitude !== null &&
+      longitude !== null &&
+      !geoError &&
+      !selectedPlace
+    ) {
       fetchWeatherByCoords(latitude, longitude);
     }
-  }, [latitude, longitude, fetchWeatherByCoords, geoError]);
+  }, [latitude, longitude, fetchWeatherByCoords, geoError, selectedPlace]);
 
   return (
     <div className="min-h-screen bg-background transition-colors duration-300">
@@ -180,29 +165,12 @@ export default function Home() {
 
           {/* Search and Refresh Bar */}
           <div className="flex gap-4">
-            <div className="relative flex-1">
-              <Input
-                type="text"
-                placeholder="Enter city name..."
-                value={city}
-                onChange={(e) => setCity(e.target.value)}
-                onKeyPress={handleKeyPress}
+            <div className="flex-1">
+              <PlaceSearch
+                onPlaceSelect={handlePlaceSelect}
                 disabled={loading}
-                className="pr-10"
               />
-              <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             </div>
-            <Button
-              onClick={fetchWeatherByCity}
-              disabled={loading || !city.trim()}
-              className="min-w-[120px]"
-            >
-              {loading ? (
-                <RefreshCw className="h-4 w-4 animate-spin" />
-              ) : (
-                "Get Weather"
-              )}
-            </Button>
             <Button
               variant="outline"
               onClick={handleRefresh}
