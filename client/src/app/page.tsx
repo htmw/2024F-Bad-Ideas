@@ -1,3 +1,4 @@
+// src/app/page.tsx
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
@@ -6,9 +7,10 @@ import { Input } from "@/components/ui/input";
 import { useGeolocation } from "@/hooks/useGeolocation";
 import WeatherDisplay from "@/components/WeatherDisplay";
 import OutfitRecommendation from "@/components/OutfitRecommendation";
-import { AlertCircle, RefreshCw } from "lucide-react";
+import { AlertCircle, RefreshCw, Search } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import type { WeatherResponse, ForecastResponse } from "@/types/weather";
 
 export default function Home() {
@@ -63,7 +65,7 @@ export default function Home() {
   // Fetch weather by coordinates
   const fetchWeatherByCoords = useCallback(
     async (lat: number, lon: number) => {
-      // Check if we're already fetched for these coordinates
+      // Check if we've already fetched for these coordinates
       if (
         lastFetchedCoords?.lat === lat &&
         lastFetchedCoords?.lon === lon &&
@@ -126,12 +128,15 @@ export default function Home() {
   // Handle manual refresh
   const handleRefresh = async () => {
     setIsRefreshing(true);
-    if (latitude && longitude) {
-      await fetchWeatherByCoords(latitude, longitude);
-    } else if (currentWeather?.city) {
-      await fetchWeatherByCity();
+    try {
+      if (latitude && longitude) {
+        await fetchWeatherByCoords(latitude, longitude);
+      } else if (currentWeather?.city) {
+        await fetchWeatherByCity();
+      }
+    } finally {
+      setIsRefreshing(false);
     }
-    setIsRefreshing(false);
   };
 
   // Handle Enter key press
@@ -149,87 +154,103 @@ export default function Home() {
   }, [latitude, longitude, fetchWeatherByCoords, geoError]);
 
   return (
-    <div className="grid grid-rows-[auto_1fr_auto] min-h-screen p-8 gap-8">
-      <header className="text-center">
-        <h1 className="text-4xl font-bold mb-4">WeatherWear</h1>
-        <p className="text-muted-foreground">
-          Your personal weather & outfit guide
-        </p>
-      </header>
+    <div className="min-h-screen bg-background transition-colors duration-300">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Header Section */}
+        <header className="relative flex flex-col items-center mb-12">
+          <div className="absolute right-0 top-0">
+            <ThemeToggle />
+          </div>
+          <h1 className="text-4xl font-bold mb-2 bg-gradient-to-r from-primary to-primary/80 bg-clip-text text-transparent">
+            WeatherWear
+          </h1>
+          <p className="text-muted-foreground text-lg">
+            Your personal weather & outfit guide
+          </p>
+        </header>
 
-      <main className="max-w-4xl mx-auto w-full space-y-8">
-        {/* Geolocation Error */}
-        {geoError && (
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>{geoError}</AlertDescription>
-          </Alert>
-        )}
+        <main className="max-w-4xl mx-auto space-y-8">
+          {/* Geolocation Error */}
+          {geoError && (
+            <Alert variant="destructive" className="animate-fadeIn">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>{geoError}</AlertDescription>
+            </Alert>
+          )}
 
-        {/* Search and Refresh Bar */}
-        <div className="flex gap-4">
-          <Input
-            type="text"
-            placeholder="Enter city name..."
-            value={city}
-            onChange={(e) => setCity(e.target.value)}
-            onKeyPress={handleKeyPress}
-            disabled={loading}
-            className="flex-1"
-          />
-          <Button
-            onClick={fetchWeatherByCity}
-            disabled={loading || !city.trim()}
-          >
-            {loading ? "Loading..." : "Get Weather"}
-          </Button>
-          <Button
-            variant="outline"
-            onClick={handleRefresh}
-            disabled={isRefreshing || !currentWeather}
-            className="w-12"
-          >
-            <RefreshCw
-              className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`}
-            />
-          </Button>
-        </div>
-
-        {/* Error Display */}
-        {error && (
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
-
-        {/* Weather and Outfit Content */}
-        {currentWeather && (
-          <Tabs defaultValue="weather" className="space-y-6">
-            <TabsList className="grid grid-cols-2">
-              <TabsTrigger value="weather">Weather</TabsTrigger>
-              <TabsTrigger value="outfit">Outfit Planner</TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="weather">
-              <WeatherDisplay weatherData={currentWeather} />
-            </TabsContent>
-
-            <TabsContent value="outfit">
-              {forecastData && (
-                <OutfitRecommendation forecastData={forecastData} />
+          {/* Search and Refresh Bar */}
+          <div className="flex gap-4">
+            <div className="relative flex-1">
+              <Input
+                type="text"
+                placeholder="Enter city name..."
+                value={city}
+                onChange={(e) => setCity(e.target.value)}
+                onKeyPress={handleKeyPress}
+                disabled={loading}
+                className="pr-10"
+              />
+              <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            </div>
+            <Button
+              onClick={fetchWeatherByCity}
+              disabled={loading || !city.trim()}
+              className="min-w-[120px]"
+            >
+              {loading ? (
+                <RefreshCw className="h-4 w-4 animate-spin" />
+              ) : (
+                "Get Weather"
               )}
-            </TabsContent>
-          </Tabs>
-        )}
-      </main>
+            </Button>
+            <Button
+              variant="outline"
+              onClick={handleRefresh}
+              disabled={isRefreshing || !currentWeather}
+              className="w-12 aspect-square"
+            >
+              <RefreshCw
+                className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`}
+              />
+            </Button>
+          </div>
 
-      <footer className="text-center text-sm text-muted-foreground">
-        <p>Powered by OpenWeather API</p>
-        <p className="text-xs mt-1">
-          {process.env.NEXT_PUBLIC_VERSION || "Development"} Build
-        </p>
-      </footer>
+          {/* Error Display */}
+          {error && (
+            <Alert variant="destructive" className="animate-fadeIn">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+
+          {/* Weather and Outfit Content */}
+          {currentWeather && (
+            <Tabs defaultValue="weather" className="space-y-6">
+              <TabsList className="grid w-full grid-cols-2 lg:w-[400px] mx-auto">
+                <TabsTrigger value="weather">Weather</TabsTrigger>
+                <TabsTrigger value="outfit">Outfit Planner</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="weather" className="animate-fadeIn">
+                <WeatherDisplay weatherData={currentWeather} />
+              </TabsContent>
+
+              <TabsContent value="outfit" className="animate-fadeIn">
+                {forecastData && (
+                  <OutfitRecommendation forecastData={forecastData} />
+                )}
+              </TabsContent>
+            </Tabs>
+          )}
+        </main>
+
+        <footer className="text-center text-sm text-muted-foreground mt-12">
+          <p>Powered by OpenWeather API</p>
+          <p className="text-xs mt-1">
+            {process.env.NEXT_PUBLIC_VERSION || "Development"} Build
+          </p>
+        </footer>
+      </div>
     </div>
   );
 }
