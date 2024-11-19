@@ -1,16 +1,13 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
-import { Calendar } from "@/components/ui/calendar";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Thermometer, Wind, Droplets, Sun } from "lucide-react";
+import { Thermometer, Wind, Droplets } from "lucide-react";
 import WeatherIcon from "@/components/WeatherIcon";
 
-const OutfitRecommendation = ({ forecastData, onDateChange }) => {
-  // User preferences state
+const OutfitRecommendation = ({ forecastData }) => {
   const [preferences, setPreferences] = useState({
     coldSensitivity: 50,
     rainProtection: true,
@@ -18,15 +15,52 @@ const OutfitRecommendation = ({ forecastData, onDateChange }) => {
     formalStyle: false,
   });
 
-  // Selected date state
-  const [selectedDate, setSelectedDate] = useState(new Date());
+  // Process and group forecast data by day
+  const groupedForecasts = useMemo(() => {
+    if (!forecastData?.forecast || !Array.isArray(forecastData.forecast)) {
+      return {};
+    }
 
-  // Get outfit recommendations based on weather and preferences
-  const getOutfitRecommendation = (weather, prefs) => {
-    const temp = weather.temperature.max; // Using max temperature for the day
+    // Group forecasts by day and find max/min temps
+    const grouped = forecastData.forecast.reduce((acc, forecast) => {
+      // Get date string in local timezone
+      const date = new Date(forecast.dt * 1000).toLocaleDateString("en-US", {
+        timeZone: "America/New_York", // Adjust this based on your needs
+      });
+
+      if (!acc[date]) {
+        acc[date] = {
+          forecasts: [],
+          maxTemp: -Infinity,
+          minTemp: Infinity,
+          highestPop: 0,
+          weatherDescriptions: new Set(),
+          icons: new Set(),
+        };
+      }
+
+      acc[date].forecasts.push(forecast);
+      acc[date].maxTemp = Math.max(acc[date].maxTemp, forecast.temperature.max);
+      acc[date].minTemp = Math.min(acc[date].minTemp, forecast.temperature.min);
+      acc[date].highestPop = Math.max(acc[date].highestPop, forecast.pop);
+      acc[date].weatherDescriptions.add(forecast.weather.description);
+      acc[date].icons.add(forecast.weather.icon);
+
+      return acc;
+    }, {});
+
+    // Take first 5 days only
+    return Object.fromEntries(Object.entries(grouped).slice(0, 5));
+  }, [forecastData]);
+
+  const getOutfitRecommendation = (dayForecast, prefs) => {
+    const temp = dayForecast.maxTemp;
     const isRaining =
-      weather.weather.main.toLowerCase().includes("rain") || weather.pop > 0.5;
-    const isWindy = weather.wind.speed > 5;
+      dayForecast.highestPop > 0.3 ||
+      Array.from(dayForecast.weatherDescriptions).some((desc) =>
+        desc.toLowerCase().includes("rain"),
+      );
+    const isWindy = dayForecast.forecasts.some((f) => f.wind.speed > 5);
     const tempThreshold = prefs.coldSensitivity * 0.2 + 15;
 
     const outfit = {
@@ -55,9 +89,13 @@ const OutfitRecommendation = ({ forecastData, onDateChange }) => {
     // Rain protection
     if (isRaining && prefs.rainProtection) {
       outfit.accessories.push("Umbrella");
-      outfit.layers.push("Rain Jacket");
-      outfit.footwear = "Waterproof Boots";
-    } else {
+      if (dayForecast.highestPop > 0.5) {
+        outfit.layers.push("Rain Jacket");
+        outfit.footwear = "Waterproof Boots";
+      }
+    }
+
+    if (!outfit.footwear) {
       outfit.footwear = temp < tempThreshold ? "Boots" : "Sneakers";
     }
 
@@ -79,22 +117,15 @@ const OutfitRecommendation = ({ forecastData, onDateChange }) => {
     return outfit;
   };
 
-  // Group forecast data by day
-  const groupedForecasts =
-    forecastData?.forecast?.reduce((acc, forecast) => {
-      const date = new Date(forecast.dt * 1000).toLocaleDateString();
-      if (!acc[date]) {
-        acc[date] = [];
-      }
-      acc[date].push(forecast);
-      return acc;
-    }, {}) || {};
+  if (!forecastData || Object.keys(groupedForecasts).length === 0) {
+    return null;
+  }
 
   return (
     <Card className="w-full max-w-4xl mt-8">
       <CardHeader>
         <CardTitle>
-          5-Day Outfit Recommendations for {forecastData?.city}
+          5-Day Outfit Recommendations for {forecastData.city}
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -106,18 +137,10 @@ const OutfitRecommendation = ({ forecastData, onDateChange }) => {
 
           <TabsContent value="forecast" className="space-y-6">
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-              {Object.entries(groupedForecasts).map(([date, dayForecasts]) => {
-                const middayForecast =
-                  dayForecasts.find(
-                    (f) =>
-                      new Date(f.dt * 1000).getHours() >= 12 &&
-                      new Date(f.dt * 1000).getHours() <= 15,
-                  ) || dayForecasts[0];
-
-                const outfit = getOutfitRecommendation(
-                  middayForecast,
-                  preferences,
-                );
+              {Object.entries(groupedForecasts).map(([date, dayData]) => {
+                const outfit = getOutfitRecommendation(dayData, preferences);
+                // Get the most representative icon for the day
+                const mainIcon = Array.from(dayData.icons)[0];
 
                 return (
                   <Card key={date} className="w-full">
@@ -130,19 +153,18 @@ const OutfitRecommendation = ({ forecastData, onDateChange }) => {
                             day: "numeric",
                           })}
                         </span>
-                        <WeatherIcon icon={middayForecast.weather.icon} />
+                        <WeatherIcon icon={mainIcon} />
                       </CardTitle>
                     </CardHeader>
 
                     <CardContent className="space-y-4">
                       {/* Weather Summary */}
                       <div className="text-sm text-muted-foreground">
-                        <p>{middayForecast.weather.description}</p>
+                        <p>{Array.from(dayData.weatherDescriptions)[0]}</p>
+                        <p>High: {Math.round(dayData.maxTemp)}°F</p>
+                        <p>Low: {Math.round(dayData.minTemp)}°F</p>
                         <p>
-                          High: {Math.round(middayForecast.temperature.max)}°F
-                        </p>
-                        <p>
-                          Rain chance: {Math.round(middayForecast.pop * 100)}%
+                          Rain chance: {Math.round(dayData.highestPop * 100)}%
                         </p>
                       </div>
 
