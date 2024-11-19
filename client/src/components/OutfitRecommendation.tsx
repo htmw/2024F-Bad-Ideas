@@ -7,29 +7,66 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Select, SelectItem } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Thermometer, Wind, Droplets, User } from "lucide-react";
+import {
+  Thermometer,
+  Wind,
+  Droplets,
+  User,
+  Sparkles,
+  Shirt,
+  PaintBucket,
+} from "lucide-react";
 import WeatherIcon from "@/components/WeatherIcon";
-import { generateOutfitRecommendation } from "@/lib/outfitLogic";
+import { generateOutfitRecommendation, styleProfiles } from "@/lib/outfitLogic";
 
 const OutfitRecommendation = ({ forecastData }) => {
   const [preferences, setPreferences] = useState({
-    gender: "unisex" as "male" | "female",
+    gender: "male" as "male" | "female",
     formalityPreference: 3,
     temperatureSensitivity: 50,
     prioritizeRainProtection: true,
     prioritizeWindProtection: true,
+    preferredStyle: ["classic", "modern"] as string[],
+    favoriteColors: ["black", "navy", "gray"] as string[],
+    avoidedMaterials: [] as string[],
+    occasionType: "casual",
+    comfortPriority: 3,
+    sustainabilityPreference: false,
+    layeringPreference: "moderate" as "minimal" | "moderate" | "maximum",
   });
 
   const getOutfitForDay = (dayData) => {
     const weatherConditions = {
       temperature: dayData.temperature.max,
+      feelsLike: dayData.temperature.feels_like,
       isRaining: dayData.pop > 0.3,
       isSnowing: dayData.weather.main === "Snow",
       windSpeed: dayData.wind.speed,
+      precipitation:
+        dayData.pop > 0.7
+          ? "heavy"
+          : dayData.pop > 0.4
+            ? "moderate"
+            : dayData.pop > 0.1
+              ? "light"
+              : "none",
+      humidity: dayData.humidity,
+      uvIndex: 0, // Add UV index if available in your weather data
       timeOfDay: "day" as "morning" | "afternoon" | "evening" | "night",
+      season: getSeasonFromDate(new Date(dayData.dt_txt)),
     };
 
     return generateOutfitRecommendation(weatherConditions, preferences);
+  };
+
+  const getSeasonFromDate = (
+    date: Date,
+  ): "spring" | "summer" | "fall" | "winter" => {
+    const month = date.getMonth();
+    if (month >= 2 && month <= 4) return "spring";
+    if (month >= 5 && month <= 7) return "summer";
+    if (month >= 8 && month <= 10) return "fall";
+    return "winter";
   };
 
   if (!forecastData || !forecastData.forecast) {
@@ -53,7 +90,7 @@ const OutfitRecommendation = ({ forecastData }) => {
           <TabsContent value="forecast" className="space-y-6">
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
               {forecastData.forecast.map((dayData) => {
-                const outfit = getOutfitForDay(dayData);
+                const outfitSuggestion = getOutfitForDay(dayData);
                 const date = new Date(dayData.dt_txt);
                 const dateStr = date.toLocaleDateString("en-US", {
                   weekday: "short",
@@ -81,78 +118,72 @@ const OutfitRecommendation = ({ forecastData }) => {
                         <p>Rain chance: {Math.round(dayData.pop * 100)}%</p>
                       </div>
 
+                      {/* Outfit Score */}
+                      <div className="flex justify-between text-sm">
+                        <span>
+                          Weather Suitability:{" "}
+                          {outfitSuggestion.weatherSuitability}%
+                        </span>
+                        <span>Comfort: {outfitSuggestion.comfortRating}%</span>
+                      </div>
+
                       {/* Outfit Recommendations */}
                       <div className="space-y-3">
-                        {/* Base Layers */}
-                        {outfit.baseLayers.length > 0 && (
+                        {outfitSuggestion.outfit.baseLayers.length > 0 && (
                           <div>
                             <h4 className="text-sm font-semibold">
                               Base Layer
                             </h4>
                             <ul className="text-sm text-muted-foreground list-disc list-inside">
-                              {outfit.baseLayers.map((item, index) => (
-                                <li key={index}>{item.name}</li>
-                              ))}
+                              {outfitSuggestion.outfit.baseLayers.map(
+                                (item, index) => (
+                                  <li key={index}>{item.name}</li>
+                                ),
+                              )}
                             </ul>
                           </div>
                         )}
 
                         {/* Mid Layers */}
-                        {outfit.midLayers.length > 0 && (
+                        {outfitSuggestion.outfit.midLayers.length > 0 && (
                           <div>
                             <h4 className="text-sm font-semibold">Mid Layer</h4>
                             <ul className="text-sm text-muted-foreground list-disc list-inside">
-                              {outfit.midLayers.map((item, index) => (
-                                <li key={index}>{item.name}</li>
-                              ))}
+                              {outfitSuggestion.outfit.midLayers.map(
+                                (item, index) => (
+                                  <li key={index}>{item.name}</li>
+                                ),
+                              )}
                             </ul>
                           </div>
                         )}
 
-                        {/* Outer Layers */}
-                        {outfit.outerLayers.length > 0 && (
-                          <div>
-                            <h4 className="text-sm font-semibold">
-                              Outer Layer
-                            </h4>
-                            <ul className="text-sm text-muted-foreground list-disc list-inside">
-                              {outfit.outerLayers.map((item, index) => (
-                                <li key={index}>{item.name}</li>
-                              ))}
+                        {/* Continue with other layers... */}
+
+                        {/* Style Notes */}
+                        {outfitSuggestion.styleNotes.length > 0 && (
+                          <div className="mt-4 text-sm">
+                            <h4 className="font-semibold">Style Notes</h4>
+                            <ul className="text-muted-foreground list-disc list-inside">
+                              {outfitSuggestion.styleNotes.map(
+                                (note, index) => (
+                                  <li key={index}>{note}</li>
+                                ),
+                              )}
                             </ul>
                           </div>
                         )}
 
-                        {/* Bottoms */}
-                        <div>
-                          <h4 className="text-sm font-semibold">Bottoms</h4>
-                          <ul className="text-sm text-muted-foreground list-disc list-inside">
-                            {outfit.bottoms.map((item, index) => (
-                              <li key={index}>{item.name}</li>
-                            ))}
-                          </ul>
-                        </div>
-
-                        {/* Footwear */}
-                        <div>
-                          <h4 className="text-sm font-semibold">Footwear</h4>
-                          <ul className="text-sm text-muted-foreground list-disc list-inside">
-                            {outfit.footwear.map((item, index) => (
-                              <li key={index}>{item.name}</li>
-                            ))}
-                          </ul>
-                        </div>
-
-                        {/* Accessories */}
-                        {outfit.accessories.length > 0 && (
-                          <div>
-                            <h4 className="text-sm font-semibold">
-                              Accessories
-                            </h4>
-                            <ul className="text-sm text-muted-foreground list-disc list-inside">
-                              {outfit.accessories.map((item, index) => (
-                                <li key={index}>{item.name}</li>
-                              ))}
+                        {/* Weather Notes */}
+                        {outfitSuggestion.weatherNotes.length > 0 && (
+                          <div className="mt-2 text-sm">
+                            <h4 className="font-semibold">Weather Notes</h4>
+                            <ul className="text-muted-foreground list-disc list-inside">
+                              {outfitSuggestion.weatherNotes.map(
+                                (note, index) => (
+                                  <li key={index}>{note}</li>
+                                ),
+                              )}
                             </ul>
                           </div>
                         )}
@@ -165,104 +196,88 @@ const OutfitRecommendation = ({ forecastData }) => {
           </TabsContent>
 
           <TabsContent value="preferences" className="space-y-6">
-            {/* Gender Preference */}
+            {/* Existing preferences... */}
+
+            {/* New preferences */}
             <div className="space-y-2">
               <Label className="flex items-center gap-2">
-                <User className="h-4 w-4" />
-                Style Preference
+                <Shirt className="h-4 w-4" />
+                Layering Preference
               </Label>
               <Select
-                value={preferences.gender}
-                onValueChange={(value: "male" | "female") =>
-                  setPreferences((prev) => ({ ...prev, gender: value }))
+                value={preferences.layeringPreference}
+                onValueChange={(value: "minimal" | "moderate" | "maximum") =>
+                  setPreferences((prev) => ({
+                    ...prev,
+                    layeringPreference: value,
+                  }))
                 }
               >
-                <SelectItem value="male">Men's Style</SelectItem>
-                <SelectItem value="female">Women's Style</SelectItem>
+                <SelectItem value="minimal">Minimal Layers</SelectItem>
+                <SelectItem value="moderate">Moderate Layers</SelectItem>
+                <SelectItem value="maximum">Maximum Layers</SelectItem>
               </Select>
             </div>
 
-            {/* Formality Level */}
             <div className="space-y-2">
-              <Label>Formality Level</Label>
+              <Label className="flex items-center gap-2">
+                <PaintBucket className="h-4 w-4" />
+                Occasion Type
+              </Label>
+              <Select
+                value={preferences.occasionType}
+                onValueChange={(value) =>
+                  setPreferences((prev) => ({ ...prev, occasionType: value }))
+                }
+              >
+                {styleProfiles.map((profile) => (
+                  <SelectItem
+                    key={profile.name.toLowerCase()}
+                    value={profile.name.toLowerCase()}
+                  >
+                    {profile.name}
+                  </SelectItem>
+                ))}
+              </Select>
+            </div>
+
+            <div className="flex items-center justify-between">
+              <Label className="flex items-center gap-2">
+                <Sparkles className="h-4 w-4" />
+                Prefer Sustainable Options
+              </Label>
+              <Switch
+                checked={preferences.sustainabilityPreference}
+                onCheckedChange={(checked) =>
+                  setPreferences((prev) => ({
+                    ...prev,
+                    sustainabilityPreference: checked,
+                  }))
+                }
+              />
+            </div>
+
+            {/* Comfort Priority */}
+            <div className="space-y-2">
+              <Label>Comfort Priority</Label>
               <Slider
-                value={[preferences.formalityPreference]}
+                value={[preferences.comfortPriority]}
                 onValueChange={([value]) =>
                   setPreferences((prev) => ({
                     ...prev,
-                    formalityPreference: value,
+                    comfortPriority: value,
                   }))
                 }
                 max={5}
                 step={1}
               />
               <p className="text-sm text-muted-foreground">
-                {preferences.formalityPreference === 1 && "Very Casual"}
-                {preferences.formalityPreference === 2 && "Casual"}
-                {preferences.formalityPreference === 3 && "Smart Casual"}
-                {preferences.formalityPreference === 4 && "Business Casual"}
-                {preferences.formalityPreference === 5 && "Formal"}
+                {preferences.comfortPriority === 1 && "Style First"}
+                {preferences.comfortPriority === 2 && "Mostly Stylish"}
+                {preferences.comfortPriority === 3 && "Balanced"}
+                {preferences.comfortPriority === 4 && "Mostly Comfortable"}
+                {preferences.comfortPriority === 5 && "Maximum Comfort"}
               </p>
-            </div>
-
-            {/* Temperature Sensitivity */}
-            <div className="space-y-2">
-              <Label className="flex items-center gap-2">
-                <Thermometer className="h-4 w-4" />
-                Temperature Sensitivity
-              </Label>
-              <Slider
-                value={[preferences.temperatureSensitivity]}
-                onValueChange={([value]) =>
-                  setPreferences((prev) => ({
-                    ...prev,
-                    temperatureSensitivity: value,
-                  }))
-                }
-                max={100}
-                step={1}
-              />
-              <p className="text-sm text-muted-foreground">
-                {preferences.temperatureSensitivity < 30
-                  ? "I usually run warm"
-                  : preferences.temperatureSensitivity > 70
-                    ? "I get cold easily"
-                    : "Average temperature sensitivity"}
-              </p>
-            </div>
-
-            {/* Rain Protection */}
-            <div className="flex items-center justify-between">
-              <Label className="flex items-center gap-2">
-                <Droplets className="h-4 w-4" />
-                Prioritize Rain Protection
-              </Label>
-              <Switch
-                checked={preferences.prioritizeRainProtection}
-                onCheckedChange={(checked) =>
-                  setPreferences((prev) => ({
-                    ...prev,
-                    prioritizeRainProtection: checked,
-                  }))
-                }
-              />
-            </div>
-
-            {/* Wind Protection */}
-            <div className="flex items-center justify-between">
-              <Label className="flex items-center gap-2">
-                <Wind className="h-4 w-4" />
-                Prioritize Wind Protection
-              </Label>
-              <Switch
-                checked={preferences.prioritizeWindProtection}
-                onCheckedChange={(checked) =>
-                  setPreferences((prev) => ({
-                    ...prev,
-                    prioritizeWindProtection: checked,
-                  }))
-                }
-              />
             </div>
           </TabsContent>
         </Tabs>
