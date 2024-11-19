@@ -1,16 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { OpenWeatherResponse } from "@/types/weather";
 
+const OPEN_WEATHER_URL = "https://open-weather13.p.rapidapi.com";
 const RAPIDAPI_KEY = process.env.RAPIDAPI_KEY;
-const BASE_URL = "https://open-weather13.p.rapidapi.com";
+
+const COUNTRY_CODE_REGEX = /^[A-Z]{2}$/;
+const CITY_NAME_REGEX = /^[a-zA-Z\s\-'.]+$/;
 
 const rapidApiHeaders = {
   "X-RapidAPI-Key": RAPIDAPI_KEY!,
   "X-RapidAPI-Host": "open-weather13.p.rapidapi.com",
 };
-
-const COUNTRY_CODE_REGEX = /^[A-Z]{2}$/;
-const CITY_NAME_REGEX = /^[a-zA-Z\s\-'.]+$/;
 
 function kelvinToFahrenheit(kelvin: number): number {
   return Math.round((((kelvin - 273.15) * 9) / 5 + 32) * 10) / 10;
@@ -31,6 +31,7 @@ export async function GET(request: NextRequest) {
     const lon = searchParams.get("lon");
     const city = searchParams.get("city");
     const country = searchParams.get("country");
+    const forecast = searchParams.get("forecast") === "true";
 
     let validatedCountry = "US";
     if (country) {
@@ -49,6 +50,7 @@ export async function GET(request: NextRequest) {
 
     let url: string;
     let temperatureUnit: "kelvin" | "fahrenheit" = "fahrenheit";
+
     if (lat && lon) {
       temperatureUnit = "kelvin";
       const latNum = parseFloat(lat);
@@ -66,7 +68,11 @@ export async function GET(request: NextRequest) {
           { status: 400 },
         );
       }
-      url = `${BASE_URL}/city/latlon/${lat}/${lon}`;
+
+      // Use forecast endpoint if forecast is requested, otherwise use current weather
+      url = forecast
+        ? `${OPEN_WEATHER_URL}/city/fivedaysforcast/${lat}/${lon}`
+        : `${OPEN_WEATHER_URL}/city/latlon/${lat}/${lon}`;
     } else if (city) {
       temperatureUnit = "fahrenheit";
       const cleanedCity = city.trim();
@@ -88,11 +94,17 @@ export async function GET(request: NextRequest) {
         );
       }
 
-      const formattedCity = encodeURIComponent(
-        cleanedCity.toLowerCase().trim(),
-      );
+      const formattedCity = cleanedCity
+        .toLowerCase()
+        .replace(/\s+/g, " ")
+        .trim()
+        .replace(/\s/g, "-")
+        .replace(/^-+|-+$/g, "");
 
-      url = `${BASE_URL}/city/${formattedCity}/${validatedCountry}`;
+      // Use forecast endpoint if forecast is requested, otherwise use current weather
+      url = forecast
+        ? `${OPEN_WEATHER_URL}/city/fivedaysforcast/${formattedCity}/${validatedCountry}`
+        : `${OPEN_WEATHER_URL}/city/${formattedCity}/${validatedCountry}`;
     } else {
       return NextResponse.json(
         { error: "Either city name or coordinates (lat/lon) are required" },
@@ -144,22 +156,39 @@ export async function GET(request: NextRequest) {
         );
       }
 
-      const data: OpenWeatherResponse = await response.json();
+      const data = await response.json();
 
-      if (
-        !data ||
-        !data.name ||
-        !data.sys ||
-        !data.main ||
-        !data.weather?.[0]
-      ) {
-        console.error("Invalid API response format:", data);
-        return NextResponse.json(
-          { error: "Invalid response from weather service" },
-          { status: 502 },
-        );
+      // Transform and return forecast data if requested
+      if (forecast) {
+        return NextResponse.json({
+          city: data.city?.name || "Unknown",
+          country: data.city?.country || "Unknown",
+          forecast:
+            data.list?.map((item: any) => ({
+              timestamp: item.dt,
+              temperature: {
+                current: kelvinToFahrenheit(item.main.temp),
+                feels_like: kelvinToFahrenheit(item.main.feels_like),
+                min: kelvinToFahrenheit(item.main.temp_min),
+                max: kelvinToFahrenheit(item.main.temp_max),
+              },
+              humidity: item.main.humidity,
+              wind: {
+                speed: item.wind.speed,
+                degree: item.wind.deg,
+              },
+              weather: {
+                main: item.weather[0].main,
+                description: item.weather[0].description,
+                icon: item.weather[0].icon,
+              },
+              pressure: item.main.pressure,
+              visibility: item.visibility / 1000,
+            })) || [],
+        });
       }
 
+      // Transform and return current weather data
       const temperatureConverter =
         temperatureUnit === "kelvin"
           ? kelvinToFahrenheit
