@@ -88,12 +88,9 @@ export async function GET(request: NextRequest) {
         );
       }
 
-      const formattedCity = cleanedCity
-        .toLowerCase()
-        .replace(/\s+/g, " ")
-        .trim()
-        .replace(/\s/g, "-")
-        .replace(/^-+|-+$/g, "");
+      const formattedCity = encodeURIComponent(
+        cleanedCity.toLowerCase().trim(),
+      );
 
       url = `${BASE_URL}/city/${formattedCity}/${validatedCountry}`;
     } else {

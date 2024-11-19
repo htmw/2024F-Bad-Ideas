@@ -5,8 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useGeolocation } from "@/hooks/useGeolocation";
 import WeatherDisplay from "@/components/WeatherDisplay";
-import { AlertCircle } from "lucide-react";
+import OutfitRecommendation from "@/components/OutfitRecommendation";
+import { AlertCircle, RefreshCw } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { WeatherResponse } from "@/types/weather";
 
 export default function Home() {
@@ -14,6 +16,9 @@ export default function Home() {
   const [weatherData, setWeatherData] = useState<WeatherResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [activeDate, setActiveDate] = useState<Date>(new Date());
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
   const {
     latitude,
     longitude,
@@ -85,6 +90,50 @@ export default function Home() {
     }
   };
 
+  // Fetch weather forecast
+  const fetchWeatherForecast = async (date: Date) => {
+    try {
+      setLoading(true);
+      setError("");
+
+      const params = new URLSearchParams({
+        date: date.toISOString(),
+        ...(latitude && longitude
+          ? { lat: latitude.toString(), lon: longitude.toString() }
+          : { city: weatherData?.city || city }),
+      });
+
+      const response = await fetch(`/api/weather/forecast?${params}`);
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `Error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      setWeatherData(data);
+      setActiveDate(date);
+    } catch (err) {
+      console.error("Error fetching forecast:", err);
+      setError(
+        err instanceof Error ? err.message : "Failed to fetch weather forecast",
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Handle manual refresh
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    if (latitude && longitude) {
+      await fetchWeatherByCoords(latitude, longitude);
+    } else if (weatherData?.city) {
+      await fetchWeatherByCity();
+    }
+    setIsRefreshing(false);
+  };
+
   // Handle Enter key press
   const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter" && !loading) {
@@ -104,7 +153,7 @@ export default function Home() {
       <header className="text-center">
         <h1 className="text-4xl font-bold mb-4">WeatherWear</h1>
         <p className="text-muted-foreground">
-          Your personal guide to weather conditions
+          Your personal weather & outfit guide
         </p>
       </header>
 
@@ -117,7 +166,7 @@ export default function Home() {
           </Alert>
         )}
 
-        {/* Search Bar */}
+        {/* Search and Refresh Bar */}
         <div className="flex gap-4">
           <Input
             type="text"
@@ -134,6 +183,16 @@ export default function Home() {
           >
             {loading ? "Loading..." : "Get Weather"}
           </Button>
+          <Button
+            variant="outline"
+            onClick={handleRefresh}
+            disabled={isRefreshing || !weatherData}
+            className="w-12"
+          >
+            <RefreshCw
+              className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`}
+            />
+          </Button>
         </div>
 
         {/* Error Display */}
@@ -144,8 +203,26 @@ export default function Home() {
           </Alert>
         )}
 
-        {/* Weather Display */}
-        {weatherData && <WeatherDisplay weatherData={weatherData} />}
+        {/* Weather and Outfit Content */}
+        {weatherData && (
+          <Tabs defaultValue="weather" className="space-y-6">
+            <TabsList className="grid grid-cols-2">
+              <TabsTrigger value="weather">Weather</TabsTrigger>
+              <TabsTrigger value="outfit">Outfit</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="weather">
+              <WeatherDisplay weatherData={weatherData} />
+            </TabsContent>
+
+            <TabsContent value="outfit">
+              <OutfitRecommendation
+                weatherData={weatherData}
+                onDateChange={fetchWeatherForecast}
+              />
+            </TabsContent>
+          </Tabs>
+        )}
       </main>
 
       <footer className="text-center text-sm text-muted-foreground">
