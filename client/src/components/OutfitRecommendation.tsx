@@ -1,23 +1,33 @@
-// src/components/OutfitRecommendation.tsx
-
 import React, { useState, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { Select, SelectItem } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Thermometer, Wind, Droplets, User } from "lucide-react";
+import { Thermometer, Wind, Droplets, User, Shirt } from "lucide-react";
 import WeatherIcon from "@/components/WeatherIcon";
 import { generateOutfitRecommendation } from "@/lib/outfitLogic";
 
 const OutfitRecommendation = ({ forecastData }) => {
   const [preferences, setPreferences] = useState({
-    gender: "unisex" as "male" | "female",
+    gender: "male" as "male" | "female",
     formalityPreference: 3,
     temperatureSensitivity: 50,
     prioritizeRainProtection: true,
     prioritizeWindProtection: true,
+    stylePreference: "casual" as
+      | "casual"
+      | "streetwear"
+      | "business"
+      | "formal"
+      | "athletic",
   });
 
   const getOutfitForDay = (dayData) => {
@@ -169,7 +179,7 @@ const OutfitRecommendation = ({ forecastData }) => {
             <div className="space-y-2">
               <Label className="flex items-center gap-2">
                 <User className="h-4 w-4" />
-                Style Preference
+                Gender Style
               </Label>
               <Select
                 value={preferences.gender}
@@ -177,8 +187,48 @@ const OutfitRecommendation = ({ forecastData }) => {
                   setPreferences((prev) => ({ ...prev, gender: value }))
                 }
               >
-                <SelectItem value="male">Men's Style</SelectItem>
-                <SelectItem value="female">Women's Style</SelectItem>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select gender style" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="male">Men's Style</SelectItem>
+                  <SelectItem value="female">Women's Style</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Style Preference */}
+            <div className="space-y-2">
+              <Label className="flex items-center gap-2">
+                <Shirt className="h-4 w-4" />
+                Style Preference
+              </Label>
+              <Select
+                value={preferences.stylePreference}
+                onValueChange={(
+                  value:
+                    | "casual"
+                    | "streetwear"
+                    | "business"
+                    | "formal"
+                    | "athletic",
+                ) =>
+                  setPreferences((prev) => ({
+                    ...prev,
+                    stylePreference: value,
+                  }))
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select style preference" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="casual">Casual</SelectItem>
+                  <SelectItem value="streetwear">Streetwear</SelectItem>
+                  <SelectItem value="business">Business</SelectItem>
+                  <SelectItem value="formal">Formal</SelectItem>
+                  <SelectItem value="athletic">Athletic</SelectItem>
+                </SelectContent>
               </Select>
             </div>
 
