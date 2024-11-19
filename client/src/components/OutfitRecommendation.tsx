@@ -1,102 +1,38 @@
+// src/components/OutfitRecommendation.tsx
+
 import React, { useState, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { Select, SelectItem } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Thermometer, Wind, Droplets } from "lucide-react";
+import { Thermometer, Wind, Droplets, User } from "lucide-react";
 import WeatherIcon from "@/components/WeatherIcon";
+import { generateOutfitRecommendation } from "@/lib/outfitLogic";
 
 const OutfitRecommendation = ({ forecastData }) => {
   const [preferences, setPreferences] = useState({
-    coldSensitivity: 50,
-    rainProtection: true,
-    windProtection: true,
-    formalStyle: false,
+    gender: "unisex" as "male" | "female",
+    formalityPreference: 3,
+    temperatureSensitivity: 50,
+    prioritizeRainProtection: true,
+    prioritizeWindProtection: true,
   });
 
-  // Process and group forecast data by day
-  const groupedForecasts = useMemo(() => {
-    if (!forecastData?.forecast || !Array.isArray(forecastData.forecast)) {
-      return {};
-    }
-
-    return forecastData.forecast.reduce((acc, forecast) => {
-      // Create a date object from dt_txt
-      const date = new Date(forecast.dt_txt);
-      // Format the date key
-      const dateKey = date.toLocaleDateString("en-US", {
-        weekday: "short",
-        month: "short",
-        day: "numeric",
-      });
-
-      acc[dateKey] = forecast;
-      return acc;
-    }, {});
-  }, [forecastData]);
-
-  const getOutfitRecommendation = (dayForecast, prefs) => {
-    const temp = dayForecast.temperature.max;
-    const isRaining = dayForecast.pop > 0.3;
-    const isWindy = dayForecast.wind.speed > 5;
-    const tempThreshold = prefs.coldSensitivity * 0.2 + 15;
-
-    const outfit = {
-      layers: [],
-      accessories: [],
-      footwear: "",
+  const getOutfitForDay = (dayData) => {
+    const weatherConditions = {
+      temperature: dayData.temperature.max,
+      isRaining: dayData.pop > 0.3,
+      isSnowing: dayData.weather.main === "Snow",
+      windSpeed: dayData.wind.speed,
+      timeOfDay: "day" as "morning" | "afternoon" | "evening" | "night",
     };
 
-    // Base layer
-    if (temp < tempThreshold) {
-      outfit.layers.push("Thermal Undershirt");
-    }
-
-    // Mid layer
-    if (temp < tempThreshold + 5) {
-      outfit.layers.push(prefs.formalStyle ? "Sweater" : "Fleece");
-    }
-
-    // Outer layer
-    if (temp < tempThreshold) {
-      outfit.layers.push(prefs.formalStyle ? "Wool Coat" : "Winter Jacket");
-    } else if (temp < tempThreshold + 10) {
-      outfit.layers.push(prefs.formalStyle ? "Light Blazer" : "Light Jacket");
-    }
-
-    // Rain protection
-    if (isRaining && prefs.rainProtection) {
-      outfit.accessories.push("Umbrella");
-      if (dayForecast.pop > 0.5) {
-        outfit.layers.push("Rain Jacket");
-        outfit.footwear = "Waterproof Boots";
-      }
-    }
-
-    if (!outfit.footwear) {
-      outfit.footwear = temp < tempThreshold ? "Boots" : "Sneakers";
-    }
-
-    // Wind protection
-    if (isWindy && prefs.windProtection) {
-      outfit.accessories.push("Scarf");
-      if (temp < tempThreshold) {
-        outfit.accessories.push("Gloves");
-      }
-    }
-
-    // Warm weather options
-    if (temp > 25) {
-      outfit.layers = [prefs.formalStyle ? "Light Cotton Shirt" : "T-Shirt"];
-      outfit.accessories.push("Sunglasses");
-      outfit.footwear = prefs.formalStyle ? "Light Dress Shoes" : "Sandals";
-    }
-
-    return outfit;
+    return generateOutfitRecommendation(weatherConditions, preferences);
   };
 
-  if (!forecastData || Object.keys(groupedForecasts).length === 0) {
+  if (!forecastData || !forecastData.forecast) {
     return null;
   }
 
@@ -116,14 +52,20 @@ const OutfitRecommendation = ({ forecastData }) => {
 
           <TabsContent value="forecast" className="space-y-6">
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-              {Object.entries(groupedForecasts).map(([date, dayData]) => {
-                const outfit = getOutfitRecommendation(dayData, preferences);
+              {forecastData.forecast.map((dayData) => {
+                const outfit = getOutfitForDay(dayData);
+                const date = new Date(dayData.dt_txt);
+                const dateStr = date.toLocaleDateString("en-US", {
+                  weekday: "short",
+                  month: "short",
+                  day: "numeric",
+                });
 
                 return (
-                  <Card key={date} className="w-full">
+                  <Card key={dayData.dt_txt} className="w-full">
                     <CardHeader className="pb-2">
                       <CardTitle className="flex justify-between items-center text-lg">
-                        <span>{date}</span>
+                        <span>{dateStr}</span>
                         <WeatherIcon icon={dayData.weather.icon} />
                       </CardTitle>
                     </CardHeader>
@@ -131,42 +73,89 @@ const OutfitRecommendation = ({ forecastData }) => {
                     <CardContent className="space-y-4">
                       {/* Weather Summary */}
                       <div className="text-sm text-muted-foreground">
-                        <p>{dayData.weather.description}</p>
+                        <p className="capitalize">
+                          {dayData.weather.description}
+                        </p>
                         <p>High: {Math.round(dayData.temperature.max)}°F</p>
                         <p>Low: {Math.round(dayData.temperature.min)}°F</p>
                         <p>Rain chance: {Math.round(dayData.pop * 100)}%</p>
                       </div>
 
                       {/* Outfit Recommendations */}
-                      <div className="space-y-2">
+                      <div className="space-y-3">
+                        {/* Base Layers */}
+                        {outfit.baseLayers.length > 0 && (
+                          <div>
+                            <h4 className="text-sm font-semibold">
+                              Base Layer
+                            </h4>
+                            <ul className="text-sm text-muted-foreground list-disc list-inside">
+                              {outfit.baseLayers.map((item, index) => (
+                                <li key={index}>{item.name}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+
+                        {/* Mid Layers */}
+                        {outfit.midLayers.length > 0 && (
+                          <div>
+                            <h4 className="text-sm font-semibold">Mid Layer</h4>
+                            <ul className="text-sm text-muted-foreground list-disc list-inside">
+                              {outfit.midLayers.map((item, index) => (
+                                <li key={index}>{item.name}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+
+                        {/* Outer Layers */}
+                        {outfit.outerLayers.length > 0 && (
+                          <div>
+                            <h4 className="text-sm font-semibold">
+                              Outer Layer
+                            </h4>
+                            <ul className="text-sm text-muted-foreground list-disc list-inside">
+                              {outfit.outerLayers.map((item, index) => (
+                                <li key={index}>{item.name}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+
+                        {/* Bottoms */}
                         <div>
-                          <h4 className="text-sm font-semibold">Layers</h4>
+                          <h4 className="text-sm font-semibold">Bottoms</h4>
                           <ul className="text-sm text-muted-foreground list-disc list-inside">
-                            {outfit.layers.map((layer, index) => (
-                              <li key={index}>{layer}</li>
+                            {outfit.bottoms.map((item, index) => (
+                              <li key={index}>{item.name}</li>
                             ))}
                           </ul>
                         </div>
 
+                        {/* Footwear */}
+                        <div>
+                          <h4 className="text-sm font-semibold">Footwear</h4>
+                          <ul className="text-sm text-muted-foreground list-disc list-inside">
+                            {outfit.footwear.map((item, index) => (
+                              <li key={index}>{item.name}</li>
+                            ))}
+                          </ul>
+                        </div>
+
+                        {/* Accessories */}
                         {outfit.accessories.length > 0 && (
                           <div>
                             <h4 className="text-sm font-semibold">
                               Accessories
                             </h4>
                             <ul className="text-sm text-muted-foreground list-disc list-inside">
-                              {outfit.accessories.map((accessory, index) => (
-                                <li key={index}>{accessory}</li>
+                              {outfit.accessories.map((item, index) => (
+                                <li key={index}>{item.name}</li>
                               ))}
                             </ul>
                           </div>
                         )}
-
-                        <div>
-                          <h4 className="text-sm font-semibold">Footwear</h4>
-                          <p className="text-sm text-muted-foreground">
-                            {outfit.footwear}
-                          </p>
-                        </div>
                       </div>
                     </CardContent>
                   </Card>
@@ -176,6 +165,46 @@ const OutfitRecommendation = ({ forecastData }) => {
           </TabsContent>
 
           <TabsContent value="preferences" className="space-y-6">
+            {/* Gender Preference */}
+            <div className="space-y-2">
+              <Label className="flex items-center gap-2">
+                <User className="h-4 w-4" />
+                Style Preference
+              </Label>
+              <Select
+                value={preferences.gender}
+                onValueChange={(value: "male" | "female") =>
+                  setPreferences((prev) => ({ ...prev, gender: value }))
+                }
+              >
+                <SelectItem value="male">Men's Style</SelectItem>
+                <SelectItem value="female">Women's Style</SelectItem>
+              </Select>
+            </div>
+
+            {/* Formality Level */}
+            <div className="space-y-2">
+              <Label>Formality Level</Label>
+              <Slider
+                value={[preferences.formalityPreference]}
+                onValueChange={([value]) =>
+                  setPreferences((prev) => ({
+                    ...prev,
+                    formalityPreference: value,
+                  }))
+                }
+                max={5}
+                step={1}
+              />
+              <p className="text-sm text-muted-foreground">
+                {preferences.formalityPreference === 1 && "Very Casual"}
+                {preferences.formalityPreference === 2 && "Casual"}
+                {preferences.formalityPreference === 3 && "Smart Casual"}
+                {preferences.formalityPreference === 4 && "Business Casual"}
+                {preferences.formalityPreference === 5 && "Formal"}
+              </p>
+            </div>
+
             {/* Temperature Sensitivity */}
             <div className="space-y-2">
               <Label className="flex items-center gap-2">
@@ -183,20 +212,20 @@ const OutfitRecommendation = ({ forecastData }) => {
                 Temperature Sensitivity
               </Label>
               <Slider
-                value={[preferences.coldSensitivity]}
+                value={[preferences.temperatureSensitivity]}
                 onValueChange={([value]) =>
                   setPreferences((prev) => ({
                     ...prev,
-                    coldSensitivity: value,
+                    temperatureSensitivity: value,
                   }))
                 }
                 max={100}
                 step={1}
               />
               <p className="text-sm text-muted-foreground">
-                {preferences.coldSensitivity < 30
+                {preferences.temperatureSensitivity < 30
                   ? "I usually run warm"
-                  : preferences.coldSensitivity > 70
+                  : preferences.temperatureSensitivity > 70
                     ? "I get cold easily"
                     : "Average temperature sensitivity"}
               </p>
@@ -209,11 +238,11 @@ const OutfitRecommendation = ({ forecastData }) => {
                 Prioritize Rain Protection
               </Label>
               <Switch
-                checked={preferences.rainProtection}
+                checked={preferences.prioritizeRainProtection}
                 onCheckedChange={(checked) =>
                   setPreferences((prev) => ({
                     ...prev,
-                    rainProtection: checked,
+                    prioritizeRainProtection: checked,
                   }))
                 }
               />
@@ -226,25 +255,12 @@ const OutfitRecommendation = ({ forecastData }) => {
                 Prioritize Wind Protection
               </Label>
               <Switch
-                checked={preferences.windProtection}
+                checked={preferences.prioritizeWindProtection}
                 onCheckedChange={(checked) =>
                   setPreferences((prev) => ({
                     ...prev,
-                    windProtection: checked,
+                    prioritizeWindProtection: checked,
                   }))
-                }
-              />
-            </div>
-
-            {/* Style Preference */}
-            <div className="flex items-center justify-between">
-              <Label className="flex items-center gap-2">
-                Prefer Formal Style
-              </Label>
-              <Switch
-                checked={preferences.formalStyle}
-                onCheckedChange={(checked) =>
-                  setPreferences((prev) => ({ ...prev, formalStyle: checked }))
                 }
               />
             </div>

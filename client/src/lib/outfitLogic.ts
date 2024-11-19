@@ -1,5 +1,3 @@
-// src/lib/outfitLogic.ts
-
 interface ClothingItem {
   name: string;
   type: "top" | "bottom" | "outerwear" | "footwear" | "accessory";
