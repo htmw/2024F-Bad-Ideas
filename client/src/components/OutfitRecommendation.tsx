@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
@@ -7,11 +7,12 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Thermometer, Wind, Droplets, Sun } from "lucide-react";
+import WeatherIcon from "@/components/WeatherIcon";
 
-const OutfitRecommendation = ({ weatherData, onDateChange }) => {
+const OutfitRecommendation = ({ forecastData, onDateChange }) => {
   // User preferences state
   const [preferences, setPreferences] = useState({
-    coldSensitivity: 50, // 0-100 scale where higher means more sensitive to cold
+    coldSensitivity: 50,
     rainProtection: true,
     windProtection: true,
     formalStyle: false,
@@ -22,10 +23,11 @@ const OutfitRecommendation = ({ weatherData, onDateChange }) => {
 
   // Get outfit recommendations based on weather and preferences
   const getOutfitRecommendation = (weather, prefs) => {
-    const temp = weather.temperature.current;
-    const isRaining = weather.weather.main.toLowerCase().includes("rain");
+    const temp = weather.temperature.max; // Using max temperature for the day
+    const isRaining =
+      weather.weather.main.toLowerCase().includes("rain") || weather.pop > 0.5;
     const isWindy = weather.wind.speed > 5;
-    const tempThreshold = prefs.coldSensitivity * 0.2 + 15; // Adjusts temperature threshold based on sensitivity
+    const tempThreshold = prefs.coldSensitivity * 0.2 + 15;
 
     const outfit = {
       layers: [],
@@ -77,63 +79,108 @@ const OutfitRecommendation = ({ weatherData, onDateChange }) => {
     return outfit;
   };
 
-  const outfit = getOutfitRecommendation(weatherData, preferences);
+  // Group forecast data by day
+  const groupedForecasts =
+    forecastData?.forecast?.reduce((acc, forecast) => {
+      const date = new Date(forecast.dt * 1000).toLocaleDateString();
+      if (!acc[date]) {
+        acc[date] = [];
+      }
+      acc[date].push(forecast);
+      return acc;
+    }, {}) || {};
 
   return (
-    <Card className="w-full max-w-2xl mt-8">
+    <Card className="w-full max-w-4xl mt-8">
       <CardHeader>
-        <CardTitle>Outfit Recommendations</CardTitle>
+        <CardTitle>
+          5-Day Outfit Recommendations for {forecastData?.city}
+        </CardTitle>
       </CardHeader>
       <CardContent>
-        <Tabs defaultValue="current">
+        <Tabs defaultValue="forecast">
           <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="current">Current Weather</TabsTrigger>
+            <TabsTrigger value="forecast">Forecast</TabsTrigger>
             <TabsTrigger value="preferences">Preferences</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="current" className="space-y-4">
-            {/* Calendar for future planning */}
-            <div className="mb-6">
-              <Label>Plan for a future date</Label>
-              <Calendar
-                mode="single"
-                selected={selectedDate}
-                onSelect={(date) => {
-                  setSelectedDate(date);
-                  onDateChange?.(date);
-                }}
-                className="rounded-md border"
-              />
-            </div>
+          <TabsContent value="forecast" className="space-y-6">
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+              {Object.entries(groupedForecasts).map(([date, dayForecasts]) => {
+                const middayForecast =
+                  dayForecasts.find(
+                    (f) =>
+                      new Date(f.dt * 1000).getHours() >= 12 &&
+                      new Date(f.dt * 1000).getHours() <= 15,
+                  ) || dayForecasts[0];
 
-            {/* Outfit Recommendations */}
-            <div className="space-y-4">
-              <div>
-                <h3 className="font-semibold mb-2">Recommended Layers</h3>
-                <ul className="list-disc list-inside space-y-1">
-                  {outfit.layers.map((layer, index) => (
-                    <li key={index} className="text-muted-foreground">
-                      {layer}
-                    </li>
-                  ))}
-                </ul>
-              </div>
+                const outfit = getOutfitRecommendation(
+                  middayForecast,
+                  preferences,
+                );
 
-              <div>
-                <h3 className="font-semibold mb-2">Accessories</h3>
-                <ul className="list-disc list-inside space-y-1">
-                  {outfit.accessories.map((accessory, index) => (
-                    <li key={index} className="text-muted-foreground">
-                      {accessory}
-                    </li>
-                  ))}
-                </ul>
-              </div>
+                return (
+                  <Card key={date} className="w-full">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="flex justify-between items-center text-lg">
+                        <span>
+                          {new Date(date).toLocaleDateString("en-US", {
+                            weekday: "short",
+                            month: "short",
+                            day: "numeric",
+                          })}
+                        </span>
+                        <WeatherIcon icon={middayForecast.weather.icon} />
+                      </CardTitle>
+                    </CardHeader>
 
-              <div>
-                <h3 className="font-semibold mb-2">Footwear</h3>
-                <p className="text-muted-foreground">{outfit.footwear}</p>
-              </div>
+                    <CardContent className="space-y-4">
+                      {/* Weather Summary */}
+                      <div className="text-sm text-muted-foreground">
+                        <p>{middayForecast.weather.description}</p>
+                        <p>
+                          High: {Math.round(middayForecast.temperature.max)}°F
+                        </p>
+                        <p>
+                          Rain chance: {Math.round(middayForecast.pop * 100)}%
+                        </p>
+                      </div>
+
+                      {/* Outfit Recommendations */}
+                      <div className="space-y-2">
+                        <div>
+                          <h4 className="text-sm font-semibold">Layers</h4>
+                          <ul className="text-sm text-muted-foreground list-disc list-inside">
+                            {outfit.layers.map((layer, index) => (
+                              <li key={index}>{layer}</li>
+                            ))}
+                          </ul>
+                        </div>
+
+                        {outfit.accessories.length > 0 && (
+                          <div>
+                            <h4 className="text-sm font-semibold">
+                              Accessories
+                            </h4>
+                            <ul className="text-sm text-muted-foreground list-disc list-inside">
+                              {outfit.accessories.map((accessory, index) => (
+                                <li key={index}>{accessory}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+
+                        <div>
+                          <h4 className="text-sm font-semibold">Footwear</h4>
+                          <p className="text-sm text-muted-foreground">
+                            {outfit.footwear}
+                          </p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
             </div>
           </TabsContent>
 

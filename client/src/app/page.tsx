@@ -9,14 +9,18 @@ import OutfitRecommendation from "@/components/OutfitRecommendation";
 import { AlertCircle, RefreshCw } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import type { WeatherResponse } from "@/types/weather";
+import type { WeatherResponse, ForecastResponse } from "@/types/weather";
 
 export default function Home() {
   const [city, setCity] = useState("");
-  const [weatherData, setWeatherData] = useState<WeatherResponse | null>(null);
+  const [currentWeather, setCurrentWeather] = useState<WeatherResponse | null>(
+    null,
+  );
+  const [forecastData, setForecastData] = useState<ForecastResponse | null>(
+    null,
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [activeDate, setActiveDate] = useState<Date>(new Date());
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const {
@@ -25,6 +29,28 @@ export default function Home() {
     error: geoError,
     loading: geoLoading,
   } = useGeolocation();
+
+  // Fetch current weather
+  const fetchCurrentWeather = async (params: URLSearchParams) => {
+    const response = await fetch(`/api/weather?${params}`);
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || `Error: ${response.status}`);
+    }
+    const data = await response.json();
+    setCurrentWeather(data);
+  };
+
+  // Fetch forecast
+  const fetchForecast = async (params: URLSearchParams) => {
+    const response = await fetch(`/api/weather/forecast?${params}`);
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || `Error: ${response.status}`);
+    }
+    const data = await response.json();
+    setForecastData(data);
+  };
 
   // Fetch weather by coordinates
   const fetchWeatherByCoords = async (lat: number, lon: number) => {
@@ -37,15 +63,7 @@ export default function Home() {
         lon: lon.toString(),
       });
 
-      const response = await fetch(`/api/weather?${params}`);
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `Error: ${response.status}`);
-      }
-
-      const data = await response.json();
-      setWeatherData(data);
+      await Promise.all([fetchCurrentWeather(params), fetchForecast(params)]);
     } catch (err) {
       console.error("Error fetching weather:", err);
       setError(
@@ -71,52 +89,11 @@ export default function Home() {
         city: city.trim(),
       });
 
-      const response = await fetch(`/api/weather?${params}`);
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `Error: ${response.status}`);
-      }
-
-      const data = await response.json();
-      setWeatherData(data);
+      await Promise.all([fetchCurrentWeather(params), fetchForecast(params)]);
     } catch (err) {
       console.error("Error fetching weather:", err);
       setError(
         err instanceof Error ? err.message : "Failed to fetch weather data",
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Fetch weather forecast
-  const fetchWeatherForecast = async (date: Date) => {
-    try {
-      setLoading(true);
-      setError("");
-
-      const params = new URLSearchParams({
-        date: date.toISOString(),
-        ...(latitude && longitude
-          ? { lat: latitude.toString(), lon: longitude.toString() }
-          : { city: weatherData?.city || city }),
-      });
-
-      const response = await fetch(`/api/weather/forecast?${params}`);
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `Error: ${response.status}`);
-      }
-
-      const data = await response.json();
-      setWeatherData(data);
-      setActiveDate(date);
-    } catch (err) {
-      console.error("Error fetching forecast:", err);
-      setError(
-        err instanceof Error ? err.message : "Failed to fetch weather forecast",
       );
     } finally {
       setLoading(false);
@@ -128,7 +105,7 @@ export default function Home() {
     setIsRefreshing(true);
     if (latitude && longitude) {
       await fetchWeatherByCoords(latitude, longitude);
-    } else if (weatherData?.city) {
+    } else if (currentWeather?.city) {
       await fetchWeatherByCity();
     }
     setIsRefreshing(false);
@@ -143,7 +120,7 @@ export default function Home() {
 
   // Effect to fetch weather when coordinates are available
   useEffect(() => {
-    if (latitude !== null && longitude !== null && !weatherData && !error) {
+    if (latitude !== null && longitude !== null && !currentWeather && !error) {
       fetchWeatherByCoords(latitude, longitude);
     }
   }, [latitude, longitude]);
@@ -157,7 +134,7 @@ export default function Home() {
         </p>
       </header>
 
-      <main className="max-w-2xl mx-auto w-full space-y-8">
+      <main className="max-w-4xl mx-auto w-full space-y-8">
         {/* Geolocation Error */}
         {geoError && (
           <Alert variant="destructive">
@@ -186,7 +163,7 @@ export default function Home() {
           <Button
             variant="outline"
             onClick={handleRefresh}
-            disabled={isRefreshing || !weatherData}
+            disabled={isRefreshing || !currentWeather}
             className="w-12"
           >
             <RefreshCw
@@ -204,22 +181,21 @@ export default function Home() {
         )}
 
         {/* Weather and Outfit Content */}
-        {weatherData && (
+        {currentWeather && (
           <Tabs defaultValue="weather" className="space-y-6">
             <TabsList className="grid grid-cols-2">
               <TabsTrigger value="weather">Weather</TabsTrigger>
-              <TabsTrigger value="outfit">Outfit</TabsTrigger>
+              <TabsTrigger value="outfit">Outfit Planner</TabsTrigger>
             </TabsList>
 
             <TabsContent value="weather">
-              <WeatherDisplay weatherData={weatherData} />
+              <WeatherDisplay weatherData={currentWeather} />
             </TabsContent>
 
             <TabsContent value="outfit">
-              <OutfitRecommendation
-                weatherData={weatherData}
-                onDateChange={fetchWeatherForecast}
-              />
+              {forecastData && (
+                <OutfitRecommendation forecastData={forecastData} />
+              )}
             </TabsContent>
           </Tabs>
         )}
