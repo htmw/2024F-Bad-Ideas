@@ -25,16 +25,16 @@ export default function WeatherDisplay({ weatherData }) {
               <span>Temperature</span>
             </div>
             <div className="text-2xl font-bold">
-              {weatherData.temperature.current}°C
+              {weatherData.temperature.current}°F
             </div>
             <div className="text-sm text-muted-foreground">
-              Feels like: {weatherData.temperature.feels_like}°C
+              Feels like: {weatherData.temperature.feels_like}°F
             </div>
           </div>
           <div className="space-y-1">
             <div className="text-sm text-muted-foreground">Range</div>
-            <div>Min: {weatherData.temperature.min}°C</div>
-            <div>Max: {weatherData.temperature.max}°C</div>
+            <div>Min: {weatherData.temperature.min}°F</div>
+            <div>Max: {weatherData.temperature.max}°F</div>
           </div>
         </div>
 
