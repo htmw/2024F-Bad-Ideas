@@ -6,11 +6,14 @@ import { Button } from "@/components/ui/button";
 import { useGeolocation } from "@/hooks/useGeolocation";
 import WeatherDisplay from "@/components/WeatherDisplay";
 import OutfitRecommendation from "@/components/OutfitRecommendation";
-import { AlertCircle, RefreshCw } from "lucide-react";
+import OutfitHistory from "@/components/OutfitHistory";
+import { AlertCircle, RefreshCw, LogOut, User } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { PlaceSearch } from "@/components/PlaceSearch";
+import { useAuth } from "@/hooks/useAuth";
+import Link from "next/link";
 import type { WeatherResponse, ForecastResponse } from "@/types/weather";
 
 interface Place {
@@ -37,6 +40,7 @@ export default function Home() {
     lon: number;
   } | null>(null);
 
+  const { user, logout } = useAuth();
   const {
     latitude,
     longitude,
@@ -141,9 +145,35 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-background transition-colors duration-300">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Header Section */}
+        {/* Header Section with Auth */}
         <header className="relative flex flex-col items-center mb-12">
-          <div className="absolute right-0 top-0">
+          <div className="absolute right-0 top-0 flex items-center gap-2">
+            {user ? (
+              <>
+                <div className="flex items-center gap-2 mr-4">
+                  <User className="h-4 w-4" />
+                  <span className="text-sm">{user.email}</span>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={logout}
+                  className="mr-4"
+                >
+                  <LogOut className="h-4 w-4 mr-2" />
+                  Logout
+                </Button>
+              </>
+            ) : (
+              <div className="flex gap-2 mr-4">
+                <Button variant="ghost" size="sm" asChild>
+                  <Link href="/auth/signin">Sign In</Link>
+                </Button>
+                <Button size="sm" asChild>
+                  <Link href="/auth/register">Sign Up</Link>
+                </Button>
+              </div>
+            )}
             <ThemeToggle />
           </div>
           <h1 className="text-4xl font-bold mb-2 bg-gradient-to-r from-primary to-primary/80 bg-clip-text text-transparent">
@@ -194,9 +224,12 @@ export default function Home() {
           {/* Weather and Outfit Content */}
           {currentWeather && (
             <Tabs defaultValue="weather" className="space-y-6">
-              <TabsList className="grid w-full grid-cols-2 lg:w-[400px] mx-auto">
+              <TabsList className="grid w-full grid-cols-3 lg:w-[600px] mx-auto">
                 <TabsTrigger value="weather">Weather</TabsTrigger>
                 <TabsTrigger value="outfit">Outfit Planner</TabsTrigger>
+                <TabsTrigger value="history" disabled={!user}>
+                  History
+                </TabsTrigger>
               </TabsList>
 
               <TabsContent value="weather" className="animate-fadeIn">
@@ -207,6 +240,10 @@ export default function Home() {
                 {forecastData && (
                   <OutfitRecommendation forecastData={forecastData} />
                 )}
+              </TabsContent>
+
+              <TabsContent value="history" className="animate-fadeIn">
+                <OutfitHistory />
               </TabsContent>
             </Tabs>
           )}
